@@ -1,0 +1,130 @@
+module Game(output logic [3:0] keyb_row, phases, an, output logic a, b, c, d, e, f, g, dp, input logic [3:0]keyb_col, input logic start, clk, reset);
+
+    logic delay;
+    logic button;
+    logic isPressed;
+    logic [1:0] redundantArray1;
+    logic [1:0] redundantArray2;
+    logic [3:0] score;
+    logic [3:0] random;
+    logic [3:0] keyValue;
+    logic [3:0] mappedKeyValue;
+    logic [3:0] storedKeyValue;
+    
+    twoBitArrayReverser rev1(redundantArray1, storedKeyValue[3:2]);
+    twoBitArrayReverser rev2(redundantArray2, storedKeyValue[1:0]);
+    FSMKeypadStartFrequency freq1(button, isPressed | start, clk);
+    FSMClockRegisterFrequency freq2(delay, button, clk);
+    register regg(storedKeyValue, clk, button, random);
+    scoreUpdater update(score, clk, isPressed, reset, result);
+    pseudoRandomNumberGenerator rng(random, clk, reset);
+    comparator imparator(result, mappedKeyValue, storedKeyValue);
+    keyMap mapper(mappedKeyValue, keyValue);
+    keypad4X4 keys(clk, keyb_row, keyb_col, keyValue, isPressed);
+    steppermotor_wrapper moteur(clk, redundantArray2, redundantArray1, phases, delay);
+    SevSeg_4digit leds(clk, 4'b0000, 4'b0000, 4'b0000, score, a, b, c, d, e, f, g, dp, an);
+endmodule
+
+module comparator(output logic result, input logic [3:0] correct, movement);
+    assign result = (correct[0] ~^ movement[0]) & (correct[1] ~^ movement[1]) & (correct[2] ~^ movement[2]) & (correct[3] ~^ movement[3]);
+endmodule
+
+module twoBitArrayReverser(output logic [1:0] reversed, input logic [1:0] inputArray);
+    assign reversed[1] = inputArray[0];
+    assign reversed[0] = inputArray[1];
+endmodule
+
+module FSMKeypadStartFrequency(output logic outputLogic, input logic inputLogic, clk);
+    logic valve = 0;
+    always_ff @(posedge clk) begin
+        if(valve == 0 && inputLogic == 0) begin
+            valve <= 0;
+            outputLogic <= 0;
+        end else if(valve == 0 && inputLogic == 1) begin
+            valve <= 1;
+            outputLogic <= 1;
+        end else if(valve == 1 && inputLogic == 0) begin
+            valve <= 0;
+            outputLogic <= 0;
+        end else begin
+            valve <= 1;
+            outputLogic <= 0;
+        end
+    end
+endmodule
+
+module FSMClockRegisterFrequency(output logic outputLogic, input logic inputLogic, clk);
+    logic valve = 0;
+    always_ff @(posedge clk) begin
+        if(valve == 0 && inputLogic == 0) begin
+            valve <= 0;
+            outputLogic <= 0;
+        end else if(valve == 0 && inputLogic == 1) begin
+            valve <= 1;
+            outputLogic <= 0;
+        end else if(valve == 1 && inputLogic == 0) begin
+            valve <= 0;
+            outputLogic <= 1;
+        end else begin
+            valve <= 1;
+            outputLogic <= 1;
+        end
+    end
+endmodule
+
+module pseudoRandomNumberGenerator(output logic [3:0] movement, input logic clk, reset);
+    logic [15:0] Q;
+    LSFR random1(Q, clk, reset);
+    assign movement = Q[15:12];
+endmodule
+
+module LSFR(output logic [15:0]Q, input logic clk, input logic reset);
+    always_ff @(posedge clk) begin
+        if(reset)
+            Q <= 16'b1111111111111111;
+        else
+            Q <= {Q[14], Q[13], Q[12], Q[11], Q[10], Q[9], Q[8], Q[7], Q[6], Q[5], Q[4], Q[3], Q[2], Q[1], Q[0], (Q[15] ^ Q[14] ^ Q[12] ^ Q[3])};
+    end
+endmodule
+
+module scoreUpdater(output logic [3:0] score, input logic clk, isPressed, reset, result);
+    always_ff @(posedge clk) begin
+        if(reset) 
+            score <= 4'b0000;
+        else if(isPressed == 1 && result == 1 && score < 4'b1001) 
+            score <= score + 1;
+        else if(isPressed == 1 && result == 0 && score > 4'b0000)
+            score <= score - 1;
+    end
+endmodule
+
+module register(output logic [3:0] whatIsStored, input logic clk, load, input logic [3:0] toBeStored);
+    always_ff @(posedge clk) begin
+        if(load) begin
+            whatIsStored <= toBeStored;
+        end
+    end
+endmodule
+
+module keyMap(output logic [3:0] mappedMovement, input logic [3:0] movement);
+    always_comb begin
+        case(movement)
+            4'b0000:mappedMovement = 4'b0000;
+            4'b0001:mappedMovement = 4'b1111;
+            4'b0010:mappedMovement = 4'b1110;
+            4'b0011:mappedMovement = 4'b1101;
+            4'b0100:mappedMovement = 4'b1100;
+            4'b0101:mappedMovement = 4'b1011;
+            4'b0110:mappedMovement = 4'b1010;
+            4'b0111:mappedMovement = 4'b1001;
+            4'b1000:mappedMovement = 4'b1000;
+            4'b1001:mappedMovement = 4'b0111;
+            4'b1010:mappedMovement = 4'b0110;
+            4'b1011:mappedMovement = 4'b0101;
+            4'b1100:mappedMovement = 4'b0100;
+            4'b1101:mappedMovement = 4'b0011;
+            4'b1110:mappedMovement = 4'b0010;
+            4'b1111:mappedMovement = 4'b0001;
+        endcase
+    end
+endmodule
